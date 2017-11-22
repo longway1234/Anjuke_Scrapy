@@ -1,0 +1,8 @@
+enum==0.4.6
+lxml==4.1.1
+redis==2.10.6
+requests==2.18.3
+Scrapy==1.4.0
+Twisted==17.9.0
+txsocksx==1.15.0.2
+pybloom==1.1
