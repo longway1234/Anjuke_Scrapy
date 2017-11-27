@@ -12,7 +12,7 @@ from ajk_zebra.items import NewHouseItem
 class AllNewSpiderSpider(scrapy.Spider):
     name = 'all_new_spider'
     allowed_domains = ['anjuke.com']
-    with open('./spiders/city_url.txt') as f:
+    with open('./data/city_url.txt') as f:
         city_url = set(f.readlines())
     start_urls = list(city_url)
     recall_city_urls = []

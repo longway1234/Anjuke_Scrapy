@@ -61,3 +61,55 @@ class ResoldHouseItem(scrapy.Item):
     house_url = scrapy.Field()  # 小区url
     map_lng = scrapy.Field()  # 地图经度
     map_lat = scrapy.Field()  # 地图维度
+
+
+# 小区列表页url
+class HouseUrlItem(scrapy.Item):
+    # define the fields for your item here like:
+    city_house_url = scrapy.Field()  # 城市
+
+
+# aoi结果 'fields_to_export': ['name', 'area', 'adcode', 'location(lng,lat)', 'type', 'id']
+class Aoi(scrapy.Item):
+    id = scrapy.Field()
+    name = scrapy.Field()
+    adcode = scrapy.Field()
+    location = scrapy.Field()
+    area = scrapy.Field()
+    type = scrapy.Field()
+
+
+# poi结果 'fields_to_export': ['name', 'location(lng,lat)', 'address', 'businessarea', 'type', 'id']
+class Poi(scrapy.Item):
+    id = scrapy.Field()
+    name = scrapy.Field()
+    type = scrapy.Field()
+    location = scrapy.Field()
+    address = scrapy.Field()
+    businessarea = scrapy.Field()
+
+
+# aoi明细 'fields_to_export': ['id', 'name', 'city_code', 'tag_display_std', 'industry', 'type_code', 'new_type', \
+# 'longitude', 'latitude', 'bound', 'shape_region', 'average_cost', 'average_cost_name']
+class AoiDetail(scrapy.Item):
+    id = scrapy.Field()
+    name = scrapy.Field()
+    city_code = scrapy.Field()
+    tag_display_std = scrapy.Field()
+    industry = scrapy.Field()
+    type_code = scrapy.Field()
+    new_type = scrapy.Field()
+    longitude = scrapy.Field()
+    latitude = scrapy.Field()
+    bound = scrapy.Field()
+    shape_region = scrapy.Field()
+    average_cost = scrapy.Field()
+    average_cost_name = scrapy.Field()
+
+
+# 品牌
+class Brand(scrapy.Item):
+    name = scrapy.Field()
+    location = scrapy.Field()
+    product = scrapy.Field()
+    cat = scrapy.Field()
