@@ -4,7 +4,6 @@
 #
 # See documentation in:
 # http://doc.scrapy.org/en/latest/topics/spider-middleware.html
-import hashlib
 from scrapy import signals
 import time
 import json
@@ -13,7 +12,6 @@ import random
 from scrapy.utils.project import get_project_settings
 
 settings = get_project_settings()
-
 
 
 class AjkZebraSpiderMiddleware(object):
@@ -65,6 +63,11 @@ class AjkZebraSpiderMiddleware(object):
 
 
 class ProxyMiddleware(object):
+    # 讯代理动态转发
+    # def process_request(self, request, spider):
+    #     request.meta['proxy'] = 'https://forward.xdaili.cn:80'
+    #     return None
+
 
     # 太阳HTTP代理
     def process_request(self, request, spider):
@@ -74,14 +77,14 @@ class ProxyMiddleware(object):
         ip_blackset = settings.get('IP_BLACKSET')
         check_url = 'https://ali.anjuke.com/'
         headers = {'User-Agent': "Mozilla/5.0 (X11; Linux i686; U;) Gecko/20070322 Kazehakase/0.4.5"}
-        while len(ip_used) > 50:
+        while len(ip_used) > 100:
             ip_reuse = ip_used.pop()
-            if ip_reuse['used_time'] < time.time() - 1:
+            if ip_reuse['used_time'] < time.time() - 0.8:
                 proxies_queue.append(ip_reuse)
             else:
                 ip_used.insert(0, ip_reuse)
         # 取出IP
-        while len(proxies_queue) < 75:
+        while len(proxies_queue) < 175:
             # 请求代理IP
             url = "http://http-api.taiyangruanjian.com/getip?num=25&type=2&pro=&city=0&yys=0&port=11&pack=7802&ts=1&ys=0&cs=0&lb=1&sb=0&pb=4&mr=1&regions="
             response = requests.get(url).content
@@ -119,7 +122,7 @@ class ProxyMiddleware(object):
                     # 将可以使用的ip插入已使用的ip列表开始位置，并从最后取出一个
                     ip_used.insert(0, proxies_ip)
                     ip_reuse = ip_used.pop()
-                    if ip_reuse['used_time'] < time.time() - 1:
+                    if ip_reuse['used_time'] < time.time() - 0.8:
                         proxies_queue.append(ip_reuse)
                     else:
                         ip_used.insert(0, ip_reuse)
@@ -142,4 +145,5 @@ class ProcessHeaderMidware():
             request.headers['User-Agent'] = ua
             # Add desired logging message here.
             # spider.logger.info(u'User-Agent is : {} {}'.format(request.headers.get('User-Agent'), request))
+        request.headers['Proxy-Authorization'] = auth
         pass

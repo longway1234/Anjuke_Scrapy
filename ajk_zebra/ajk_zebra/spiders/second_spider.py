@@ -182,7 +182,7 @@ class SecondSpiderSpider(scrapy.Spider):
         elif failure.check(TimeoutError, TCPTimedOutError):
             request = failure.request
             self.logger.error('TimeoutError on %s', request.url)
-            # self.ip_blackset.add(request.meta['proxy'].replace(r'https://', ''))
-            # print(self.ip_blackset)
+            self.ip_blackset.add(request.meta['proxy'].replace(r'https://', ''))
+            print(self.ip_blackset)
         else:
             pass
