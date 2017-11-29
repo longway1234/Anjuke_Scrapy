@@ -169,7 +169,6 @@ class SecondSpiderSpider(scrapy.Spider):
             item['property_company'] = selector.xpath("//dl[@class='basic-parms-mod']/dd[10]/text()").extract_first()
             item['detail_community'] = selector.xpath(
                 "//div[contains(@class,'comm-brief-mod')]/p/text()").extract_first()
-            print(' save data successful!')
             yield item
 
     def log_error(self, failure):
@@ -181,8 +180,18 @@ class SecondSpiderSpider(scrapy.Spider):
             self.logger.error('DNSLookupError on %s', request.url)
         elif failure.check(TimeoutError, TCPTimedOutError):
             request = failure.request
-            self.logger.error('TimeoutError on %s', request.url)
-            self.ip_blackset.add(request.meta['proxy'].replace(r'https://', ''))
-            print(self.ip_blackset)
+            if 'anjuke.com/community/view/' in request.url:
+                house_url = request.meta['request_url']
+                avg_price = request.meta['avg_price']
+                chain_month = request.meta['chain_month']
+                resold_number = request.meta['resold_number']
+                yield scrapy.Request(url=house_url, callback=self.parse_resold_house_info, dont_filter=True,
+                                     errback=self.log_error, meta={'request_url': house_url, 'avg_price': avg_price,
+                                                                   'chain_month': chain_month,
+                                                                   'resold_number': resold_number})
+            else:
+                self.logger.error('TimeoutError on %s', request.url)
+                self.ip_blackset.add(request.meta['proxy'].replace(r'https://', ''))
+                print(self.ip_blackset)
         else:
             pass

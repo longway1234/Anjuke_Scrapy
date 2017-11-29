@@ -32,7 +32,7 @@ class ResoldHousePipeline(object):
             'fields_to_export': ['city_name', 'house_title', 'house_address', 'avg_price',
                                  'chain_month', 'resold_number', 'building_years', 'developers',
                                  'property_company', 'parking_number', 'plot_ratio', 'greening_rate', 'property_price',
-                                 'property_type', 'property_price', 'total_area', 'total_houses', 'house_url',
+                                 'property_type', 'total_area', 'total_houses', 'house_url',
                                  'map_lng', 'map_lat', 'detail_community']}
 
         self.exporter = CsvItemExporter(file, include_headers_line=True, **kwargs)

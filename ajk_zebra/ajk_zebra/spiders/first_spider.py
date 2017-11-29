@@ -27,7 +27,7 @@ class FirstSpiderSpider(scrapy.Spider):
 
     allowed_domains = ['anjuke.com']
     # 城市小区列表页
-    with open('./data/house_url.txt') as f:
+    with open('./data/city_second_url.txt') as f:
         city_urls = f.readlines()
     start_urls = [city.strip() for city in city_urls]
     with open('./data/house_url.txt') as f:
@@ -38,13 +38,11 @@ class FirstSpiderSpider(scrapy.Spider):
 
     def start_requests(self):
         for start_url in self.start_urls:
-            # 构造并发生该城市下的小区列表请求
-            city_url = start_url + "/community/?from=navigation"
-            yield Request(city_url, self.parse, meta={'start_url': city_url})
+            yield Request(start_url, self.parse, meta={'request_url': city_url})
 
     def parse(self, response):
         #  获得该城市下的小区列表
-        city_url = response.meta['start_url']
+        city_url = response.meta['request_url']
         # print(city_url, response.url, response.meta['proxy'])
         print(city_url, response.url)
         selector = Selector(response)
@@ -52,7 +50,7 @@ class FirstSpiderSpider(scrapy.Spider):
         # 判断是否出现验证码
         if house_num is None:
             # 将出现验证码的ip 加入黑名单，重发请求
-            # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
+            self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
             print(self.ip_blackset)
             self.num_black += 1
             logger.error('had show verification code %s times' % self.num_black)
@@ -60,104 +58,6 @@ class FirstSpiderSpider(scrapy.Spider):
                                  errback=self.log_error, meta={'request_url': city_url})
         elif int(house_num) == 0:
             return
-        elif int(house_num) < 1500:
-            div_list = selector.xpath("//div[@id='list-content']/div[@class='li-itemmod']")
-            for resold_house in div_list:
-                # 解析出单个小区信息
-                house_url = 'https://anjuke.com' + resold_house.xpath(
-                    "./div[@class='li-info']/h3/a/@href").extract_first()
-                if house_url not in self.house_urls:
-                    avg_price = resold_house.xpath("./div[@class='li-side']/p/strong/text()").extract_first()
-                    chain_month = resold_house.xpath("./div[@class='li-side']/p[2]/text()").extract_first()
-                    resold_number = resold_house.xpath("./div//p[2]/span/a/text()").extract_first()
-                    yield scrapy.Request(url=house_url, callback=self.parse_resold_house_info,
-                                         errback=self.log_error, meta={'request_url': house_url, 'avg_price': avg_price,
-                                                                       'chain_month': chain_month,
-                                                                       'resold_number': resold_number})
-                else:
-                    print('already exist!')
-            next_url = selector.xpath(
-                "//div[@class = 'page-content']//a[contains(@class,'aNxt')]/@href").extract_first()
-            if next_url is not None:
-                yield scrapy.Request(url=next_url, callback=self.parse_last_area, errback=self.log_error,
-                                     meta={'request_url': next_url})
-        else:
-            area_list = selector.xpath(
-                "//div[contains(@class,'items-list')]/div[1]/span[@class = 'elems-l']/a/@href").extract()
-            for area_url in area_list[1:]:
-                yield scrapy.Request(url=area_url, callback=self.parse_resold_area,
-                                     errback=self.log_error, meta={'request_url': area_url})
-
-    def parse_resold_area(self, response):
-        # 该城市一级区域地址url
-        city_url = response.meta['request_url']
-        selector = Selector(response)
-        # print(city_url, response.url, response.meta['proxy'])
-        print(city_url, response.url)
-        house_num = selector.xpath("//div[@class='sortby']/span/em[2]/text()").extract_first()
-        if house_num is None:
-            # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
-            # print(self.ip_blackset)
-            self.num_black += 1
-            logger.error('had show verification code %s times' % self.num_black)
-            yield scrapy.Request(url=city_url, callback=self.parse_resold_area, dont_filter=True,
-                                 errback=self.log_error, meta={'request_url': city_url})
-        elif int(house_num) == 0:
-            return
-        elif int(house_num) < 1500:
-            div_list = selector.xpath("//div[@id='list-content']/div[@class='li-itemmod']")
-            for resold_house in div_list:
-                # 解析出单个小区信息
-                house_url = 'https://anjuke.com' + resold_house.xpath(
-                    "./div[@class='li-info']/h3/a/@href").extract_first()
-                if house_url not in self.house_urls:
-                    avg_price = resold_house.xpath("./div[@class='li-side']/p/strong/text()").extract_first()
-                    chain_month = resold_house.xpath("./div[@class='li-side']/p[2]/text()").extract_first()
-                    resold_number = resold_house.xpath("./div//p[2]/span/a/text()").extract_first()
-                    yield scrapy.Request(url=house_url, callback=self.parse_resold_house_info,
-                                         errback=self.log_error, meta={'request_url': house_url, 'avg_price': avg_price,
-                                                                       'chain_month': chain_month,
-                                                                       'resold_number': resold_number})
-                else:
-                    print('already exist!')
-            next_url = selector.xpath(
-                "//div[@class = 'page-content']//a[contains(@class,'aNxt')]/@href").extract_first()
-            if next_url is not None:
-                yield scrapy.Request(url=next_url, callback=self.parse_last_area, errback=self.log_error,
-                                     meta={'request_url': next_url})
-        else:
-            # 提取三个分类列表，构造最终小区的列表页url
-            area_list = selector.xpath(
-                "//div[contains(@class,'items-list')]/div[1]/span[@class = 'elems-l']/div/a/@href").extract()
-            second_list = selector.xpath(
-                "//div[contains(@class,'items-list')]/div[2]/span[@class = 'elems-l']/a/@href").extract()
-            price_list = selector.xpath(
-                "//div[contains(@class,'items-list')]/div[3]/span[@class = 'elems-l']/a/@href").extract()
-            for area in area_list[1:]:
-                for second_url in second_list[1:]:
-                    second = second_url.replace(city_url, '').replace(r'/', '')
-                    for price_url in price_list[1:]:
-                        price = price_url.replace(city_url, '')
-                        area_url = '{}{}-{}'.format(area, second, price)
-                        yield scrapy.Request(url=area_url, callback=self.parse_last_area,
-                                             errback=self.log_error, meta={'request_url': area_url})
-
-    def parse_last_area(self, response):
-        # 解析最终小区的列表页url， 提取单个小区的url
-        area_url = response.meta['request_url']
-        print(area_url, response.url)
-        # print(area_url, response.url, response.meta['proxy'])
-        selector = Selector(response)
-        house_num = selector.xpath("//div[@class='sortby']/span/em[2]/text()").extract_first()
-        if house_num is None:
-            # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
-            print(self.ip_blackset)
-            self.num_black += 1
-            logger.error('had show verification code %s times' % self.num_black)
-            yield scrapy.Request(url=area_url, callback=self.parse_last_area, dont_filter=True,
-                                 errback=self.log_error, meta={'request_url': area_url})
-        elif int(house_num) == 0:
-            return
         else:
             div_list = selector.xpath("//div[@id='list-content']/div[@class='li-itemmod']")
             for resold_house in div_list:
@@ -177,9 +77,9 @@ class FirstSpiderSpider(scrapy.Spider):
             next_url = selector.xpath(
                 "//div[@class = 'page-content']//a[contains(@class,'aNxt')]/@href").extract_first()
             if next_url is not None:
-                yield scrapy.Request(url=next_url, callback=self.parse_last_area, errback=self.log_error,
+                yield scrapy.Request(url=next_url, callback=self.parse, errback=self.log_error,
                                      meta={'request_url': next_url})
-
+    
     def parse_resold_house_info(self, response):
         # 解析小区详情页的信息
         house_url = response.meta['request_url']
@@ -191,8 +91,8 @@ class FirstSpiderSpider(scrapy.Spider):
         selector = Selector(response)
         house_title = selector.xpath("//div[@class='comm-title']/h1/text()").extract_first()
         if house_title is None:
-            # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
-            # print(self.ip_blackset)
+            self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
+            print(self.ip_blackset)
             self.num_black += 1
             logger.error('had show verification code %s times' % self.num_black)
             yield scrapy.Request(url=house_url, callback=self.parse_resold_house_info, dont_filter=True,
@@ -255,7 +155,7 @@ class FirstSpiderSpider(scrapy.Spider):
             else:
                 self.logger.error('TimeoutError on %s,%s', request.url, request.meta['proxy'])
                 self.logger.error('TimeoutError on %s', request.url)
-                # self.ip_blackset.add(request.meta['proxy'].replace(r'https://', ''))
-                # print(self.ip_blackset)
+                self.ip_blackset.add(request.meta['proxy'].replace(r'https://', ''))
+                print(self.ip_blackset)
         else:
             pass
