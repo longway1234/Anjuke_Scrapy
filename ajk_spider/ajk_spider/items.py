@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
+
 # Define here the models for your scraped items
+#
 # See documentation in:
 # http://doc.scrapy.org/en/latest/topics/items.html
+
 import scrapy
 
 
@@ -35,7 +38,7 @@ class NewHouseItem(scrapy.Item):
     parking_number = scrapy.Field()  # 停车位
     parking_rate = scrapy.Field()  # 车位比
     map_lng = scrapy.Field()  # 地图经度
-    map_lat = scrapy.Field()  # 地图维度
+    map_lat = scrapy.Field()  # 地图纬度
 
 
 # 二手房小区
@@ -57,13 +60,6 @@ class ResoldHouseItem(scrapy.Item):
     property_price = scrapy.Field()  # 物业费
     total_area = scrapy.Field()  # 总建面积
     total_houses = scrapy.Field()  # 总户数
-    detail_community = scrapy.Field()  # 小区介绍(包含','需要替换)
     house_url = scrapy.Field()  # 小区url
     map_lng = scrapy.Field()  # 地图经度
-    map_lat = scrapy.Field()  # 地图维度
-
-
-# 小区列表页url
-class HouseUrlItem(scrapy.Item):
-    # define the fields for your item here like:
-    city_house_url = scrapy.Field()  # 城市
+    map_lat = scrapy.Field()  # 地图纬度
