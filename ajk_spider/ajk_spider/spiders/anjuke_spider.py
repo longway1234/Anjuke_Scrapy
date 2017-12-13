@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import re
-
 import scrapy
 from copy import deepcopy
 from scrapy import Selector
@@ -24,7 +23,7 @@ class AnjukeSpiderSpider(scrapy.Spider):
         },
         'CONCURRENT_REQUESTS': '1',
         'CONCURRENT_REQUESTS_PER_IP': '1',
-        'DOWNLOAD_DELAY': '2',
+        'DOWNLOAD_DELAY': '1.5',
         'LOG_FILE': './logs/anjuke.log',
         'LOG_FORMAT': '%(name)s-%(levelname)s: %(message)s',
         'LOG_LEVEL': 'ERROR'
@@ -59,9 +58,9 @@ class AnjukeSpiderSpider(scrapy.Spider):
             yield scrapy.Request(url=city_url, callback=self.parse_new_url, errback=self.log_error,
                                  meta={'request_url': city_url})
             # 请求二手房小区列表页
-            lopan_url = city_url + "/community/?from=navigation"
-            yield scrapy.Request(url=lopan_url, callback=self.parse_resold_houses, errback=self.log_error,
-                                 meta={'request_url': lopan_url})
+            # resold_url = city_url + "/community/?from=navigation"
+            # yield scrapy.Request(url=resold_url, callback=self.parse_resold_houses, errback=self.log_error,
+            #                      meta={'request_url': resold_url, 'retry_time': 0})
 
     def parse_new_url(self, response):
         # 该城市解析出新楼盘的url
@@ -71,21 +70,25 @@ class AnjukeSpiderSpider(scrapy.Spider):
         city_new_url = selector.xpath("//div[@class='sec_divnew div_xinfang']/a/@href").extract_first()
         if city_new_url is not None:
             yield scrapy.Request(url=city_new_url, callback=self.parse_new_houses, errback=self.log_error,
-                                 meta={'request_url': city_new_url})
+                                 meta={'request_url': city_new_url, 'retry_time': 0})
 
     def parse_new_houses(self, response):
         # 获得该城市下的新楼盘列表
         request_url = response.meta["request_url"]
-        # print(request_url, response.url)
+        retry_time = response.meta["retry_time"]
         selector = Selector(response)
         house_num = selector.xpath("//div[@class='sort-condi']/span/em/text()").extract_first()
         if house_num is None:
-            # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
-            self.num_black += 1
-            if self.num_black % 10 == 0:
-                print('had show verification code %s times' % self.num_black)
-            yield scrapy.Request(url=request_url, callback=self.parse_new_houses, errback=self.log_error,
-                                 dont_filter=True, meta={'request_url': request_url})
+            if retry_time < 4:
+                # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
+                self.num_black += 1
+                retry_time += 1
+                if self.num_black % 10 == 0:
+                    print('had show verification code %s times' % self.num_black)
+                yield scrapy.Request(url=request_url, callback=self.parse_new_houses, errback=self.log_error,
+                                     dont_filter=True, meta={'request_url': request_url, 'retry_time': retry_time})
+            else:
+                self.logger.error("%s had show verification code %s times" % (request_url, retry_time))
         elif int(house_num) == 0:
             return
         else:
@@ -104,30 +107,35 @@ class AnjukeSpiderSpider(scrapy.Spider):
                         "./div[@class='infos']//i[@class='status-icon wuyetp']/text()").extract_first()
                     yield scrapy.Request(url=item['house_url'], callback=self.parse_new_info,
                                          meta={"item": deepcopy(item), "city_id": deepcopy(city_id),
-                                               'request_url': item['house_url']})
+                                               'request_url': item['house_url'], 'retry_time': 0})
                 else:
                     print('new_house already exist!!!')
         next_url = selector.xpath("//div[@class='list-page']//a[contains(@class,'next-page')]/@href").extract_first()
         if next_url is not None:
             yield scrapy.Request(url=next_url, callback=self.parse_new_houses, errback=self.log_error,
-                                 meta={'request_url': next_url})
+                                 meta={'request_url': next_url, 'retry_time': 0})
 
     def parse_new_info(self, response):
         # 解析楼盘详情页的信息
         request_url = response.meta["request_url"]
+        retry_time = response.meta["retry_time"]
         print(request_url, response.url)
         selector = Selector(response)
         item = deepcopy(response.meta["item"])
         city_id = deepcopy(response.meta["city_id"])
         house_address = selector.xpath(u"//div[text()='楼盘地址']/following-sibling::div[1]/text()").extract_first()
         if house_address is None:
-            # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
-            self.num_black += 1
-            if self.num_black % 10 == 0:
-                print('had show verification code %s times' % self.num_black)
-            yield scrapy.Request(url=item['house_url'], callback=self.parse_new_info, dont_filter=True,
-                                 meta={"item": deepcopy(item), "city_id": deepcopy(city_id),
-                                       'request_url': request_url})
+            if retry_time < 4:
+                # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
+                retry_time += 1
+                self.num_black += 1
+                if self.num_black % 10 == 0:
+                    print('had show verification code %s times' % self.num_black)
+                yield scrapy.Request(url=item['house_url'], callback=self.parse_new_info, dont_filter=True,
+                                     meta={"item": deepcopy(item), "city_id": deepcopy(city_id),
+                                           'request_url': request_url, 'retry_time': retry_time})
+            else:
+                self.logger.error("%s had show verification code %s times" % (request_url, retry_time))
         else:
             item['house_address'] = house_address.replace('\n', '').replace(' ', '').replace('，', ' ').replace(',', ' ')
             feature = selector.xpath(u"//div[text()='楼盘特点']/following-sibling::div[1]/a/text()").extract()
@@ -237,16 +245,22 @@ class AnjukeSpiderSpider(scrapy.Spider):
     def parse_resold_houses(self, response):
         #  解析该城市下的首页小区列表
         city_house_url = response.meta['request_url']
+        retry_time = response.meta["retry_time"]
         selector = Selector(response)
         print(city_house_url, response.url)
         house_num = selector.xpath("//div[@class='sortby']/span/em[2]/text()").extract_first()
         if house_num is None:
-            # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
-            self.num_black += 1
-            if self.num_black % 10 == 0:
-                print('had show verification code %s times' % self.num_black)
-            yield scrapy.Request(url=city_house_url, callback=self.parse_resold_houses, dont_filter=True,
-                                 errback=self.log_error, meta={'request_url': city_house_url})
+            if retry_time < 4:
+                retry_time += 1
+                # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
+                self.num_black += 1
+                if self.num_black % 10 == 0:
+                    print('had show verification code %s times' % self.num_black)
+                yield scrapy.Request(url=city_house_url, callback=self.parse_resold_houses, dont_filter=True,
+                                     errback=self.log_error,
+                                     meta={'request_url': city_house_url, 'retry_time': retry_time})
+            else:
+                self.logger.error("%s had show verification code %s times" % (city_house_url, retry_time))
         elif int(house_num) == 0:
             return
         elif int(house_num) < 1500:
@@ -263,34 +277,39 @@ class AnjukeSpiderSpider(scrapy.Spider):
                     yield scrapy.Request(url=house_url, callback=self.parse_resold_house_info,
                                          errback=self.log_error, meta={'request_url': house_url, 'avg_price': avg_price,
                                                                        'chain_month': chain_month,
-                                                                       'resold_number': resold_number})
+                                                                       'resold_number': resold_number, 'retry_time': 0})
                 else:
                     print('resold_house already exist!')
             next_url = selector.xpath(
                 "//div[@class = 'page-content']//a[contains(@class,'aNxt')]/@href").extract_first()
             if next_url is not None:
                 yield scrapy.Request(url=next_url, callback=self.parse_last_area, errback=self.log_error,
-                                     meta={'request_url': next_url})
+                                     meta={'request_url': next_url, 'retry_time': 0})
         else:
             area_list = selector.xpath(
                 "//div[contains(@class,'items-list')]/div[1]/span[@class = 'elems-l']/a/@href").extract()
             for area_url in area_list[1:]:
                 yield scrapy.Request(url=area_url, callback=self.parse_resold_area,
-                                     errback=self.log_error, meta={'request_url': area_url})
+                                     errback=self.log_error, meta={'request_url': area_url, 'retry_time': 0})
 
     def parse_resold_area(self, response):
         # 该城市一级区域地址url
         city_url = response.meta['request_url']
+        retry_time = response.meta["retry_time"]
         selector = Selector(response)
         print(city_url, response.url)
         house_num = selector.xpath("//div[@class='sortby']/span/em[2]/text()").extract_first()
         if house_num is None:
-            # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
-            self.num_black += 1
-            if self.num_black % 10 == 0:
-                print('had show verification code %s times' % self.num_black)
-            yield scrapy.Request(url=city_url, callback=self.parse_resold_area, dont_filter=True,
-                                 errback=self.log_error, meta={'request_url': city_url})
+            if retry_time < 4:
+                retry_time += 1
+                # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
+                self.num_black += 1
+                if self.num_black % 10 == 0:
+                    print('had show verification code %s times' % self.num_black)
+                yield scrapy.Request(url=city_url, callback=self.parse_resold_area, dont_filter=True,
+                                     errback=self.log_error, meta={'request_url': city_url, 'retry_time': retry_time})
+            else:
+                self.logger.error("%s had show verification code %s times" % (city_url, retry_time))
         elif int(house_num) == 0:
             return
         elif int(house_num) < 1500:
@@ -307,14 +326,14 @@ class AnjukeSpiderSpider(scrapy.Spider):
                     yield scrapy.Request(url=house_url, callback=self.parse_resold_house_info,
                                          errback=self.log_error, meta={'request_url': house_url, 'avg_price': avg_price,
                                                                        'chain_month': chain_month,
-                                                                       'resold_number': resold_number})
+                                                                       'resold_number': resold_number, 'retry_time': 0})
                 else:
                     print('resold_house already exist!')
             next_url = selector.xpath(
                 "//div[@class = 'page-content']//a[contains(@class,'aNxt')]/@href").extract_first()
             if next_url is not None:
                 yield scrapy.Request(url=next_url, callback=self.parse_last_area, errback=self.log_error,
-                                     meta={'request_url': next_url})
+                                     meta={'request_url': next_url, 'retry_time': 0})
         else:
             # 提取三个分类列表，构造最终小区的列表页url
             area_list = selector.xpath(
@@ -330,21 +349,26 @@ class AnjukeSpiderSpider(scrapy.Spider):
                         price = price_url.replace(city_url, '')
                         area_url = '{}{}-{}'.format(area, second, price)
                         yield scrapy.Request(url=area_url, callback=self.parse_last_area,
-                                             errback=self.log_error, meta={'request_url': area_url})
+                                             errback=self.log_error, meta={'request_url': area_url, 'retry_time': 0})
 
     def parse_last_area(self, response):
         # 解析最终小区的列表页url， 提取单个小区的url
         area_url = response.meta['request_url']
+        retry_time = response.meta["retry_time"]
         print(area_url, response.url)
         selector = Selector(response)
         house_num = selector.xpath("//div[@class='sortby']/span/em[2]/text()").extract_first()
         if house_num is None:
-            # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
-            self.num_black += 1
-            if self.num_black % 10 == 0:
-                print('had show verification code %s times' % self.num_black)
-            yield scrapy.Request(url=area_url, callback=self.parse_last_area, dont_filter=True,
-                                 errback=self.log_error, meta={'request_url': area_url})
+            if retry_time < 4:
+                retry_time += 1
+                # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
+                self.num_black += 1
+                if self.num_black % 10 == 0:
+                    print('had show verification code %s times' % self.num_black)
+                yield scrapy.Request(url=area_url, callback=self.parse_last_area, dont_filter=True,
+                                     errback=self.log_error, meta={'request_url': area_url, 'retry_time': retry_time})
+            else:
+                self.logger.error("%s had show verification code %s times" % (area_url, retry_time))
         elif int(house_num) == 0:
             return
         else:
@@ -361,14 +385,14 @@ class AnjukeSpiderSpider(scrapy.Spider):
                     yield scrapy.Request(url=house_url, callback=self.parse_resold_house_info,
                                          errback=self.log_error, meta={'request_url': house_url, 'avg_price': avg_price,
                                                                        'chain_month': chain_month,
-                                                                       'resold_number': resold_number})
+                                                                       'resold_number': resold_number, 'retry_time': 0})
                 else:
                     print('resold_house already exist!')
             next_url = selector.xpath(
                 "//div[@class = 'page-content']//a[contains(@class,'aNxt')]/@href").extract_first()
             if next_url is not None:
                 yield scrapy.Request(url=next_url, callback=self.parse_last_area, errback=self.log_error,
-                                     meta={'request_url': next_url})
+                                     meta={'request_url': next_url, 'retry_time': 0})
 
     def parse_resold_house_info(self, response):
         # 解析小区详情页的信息
@@ -376,19 +400,25 @@ class AnjukeSpiderSpider(scrapy.Spider):
         avg_price = response.meta['avg_price']
         chain_month = response.meta['chain_month']
         resold_number = response.meta['resold_number']
+        retry_time = response.meta["retry_time"]
         print(house_url, response.url)
         selector = Selector(response)
         house_title = selector.xpath("//div[@class='comm-title']/h1/text()").extract_first()
         # 判断是否出现验证码，是则重发请求
         if house_title is None:
-            # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
-            self.num_black += 1
-            if self.num_black % 10 == 0:
-                print('had show verification code %s times' % self.num_black)
-            yield scrapy.Request(url=house_url, callback=self.parse_resold_house_info, dont_filter=True,
-                                 errback=self.log_error, meta={'request_url': house_url, 'avg_price': avg_price,
-                                                               'chain_month': chain_month,
-                                                               'resold_number': resold_number})
+            if retry_time < 4:
+                retry_time += 1
+                # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
+                self.num_black += 1
+                if self.num_black % 10 == 0:
+                    print('had show verification code %s times' % self.num_black)
+                yield scrapy.Request(url=house_url, callback=self.parse_resold_house_info, dont_filter=True,
+                                     errback=self.log_error, meta={'request_url': house_url, 'avg_price': avg_price,
+                                                                   'chain_month': chain_month,
+                                                                   'resold_number': resold_number,
+                                                                   'retry_time': retry_time})
+            else:
+                self.logger.error("%s had show verification code %s times" % (house_url, retry_time))
         else:
             item = ResoldHouseItem()
             item['city_name'] = selector.xpath("//div[@id='switch_apf_id_5']/text()") \
@@ -464,28 +494,44 @@ class AnjukeSpiderSpider(scrapy.Spider):
         elif failure.check(TimeoutError, TCPTimedOutError):
             request = failure.request
             if 'anjuke.com/community/view/' in request.url:
-                house_url = request.meta['request_url']
-                avg_price = request.meta['avg_price']
-                chain_month = request.meta['chain_month']
-                resold_number = request.meta['resold_number']
-                yield scrapy.Request(url=house_url, callback=self.parse_resold_house_info, dont_filter=True,
-                                     errback=self.log_error, meta={'request_url': house_url, 'avg_price': avg_price,
-                                                                   'chain_month': chain_month,
-                                                                   'resold_number': resold_number})
+                retry_time = request.meta['retry_time']
+                if retry_time < 4:
+                    house_url = request.meta['request_url']
+                    avg_price = request.meta['avg_price']
+                    chain_month = request.meta['chain_month']
+                    resold_number = request.meta['resold_number']
+                    yield scrapy.Request(url=house_url, callback=self.parse_resold_house_info, dont_filter=True,
+                                         errback=self.log_error, meta={'request_url': house_url, 'avg_price': avg_price,
+                                                                       'chain_month': chain_month,
+                                                                       'resold_number': resold_number, 'retry_time': 0})
+                else:
+                    self.logger.error("%s had show verification code %s times" % (request.url, retry_time))
             elif 'anjuke.com/community/' in request.url:
-                yield scrapy.Request(url=request.url, callback=self.parse, errback=self.log_error,
-                                     dont_filter=True,
-                                     meta={'request_url': request.url})
+                retry_time = request.meta['retry_time']
+                if retry_time < 4:
+                    yield scrapy.Request(url=request.url, callback=self.parse, errback=self.log_error,
+                                         dont_filter=True,
+                                         meta={'request_url': request.url, 'retry_time': retry_time})
+                else:
+                    self.logger.error("%s had show verification code %s times" % (request.url, retry_time))
             elif 'fang.anjuke.com/loupan/canshu' in request.url:
-                item = deepcopy(request.meta["item"])
-                city_id = deepcopy(request.meta["city_id"])
-                yield scrapy.Request(url=item['house_url'], callback=self.parse_new_info, dont_filter=True,
-                                     meta={"item": deepcopy(item), "city_id": deepcopy(city_id),
-                                           'request_url': request.url})
+                retry_time = request.meta['retry_time']
+                if retry_time < 4:
+                    item = deepcopy(request.meta["item"])
+                    city_id = deepcopy(request.meta["city_id"])
+                    yield scrapy.Request(url=item['house_url'], callback=self.parse_new_info, dont_filter=True,
+                                         meta={"item": deepcopy(item), "city_id": deepcopy(city_id),
+                                               'request_url': request.url, 'retry_time': retry_time})
+                else:
+                    self.logger.error("%s had show verification code %s times" % (request.url, retry_time))
             elif 'fang.anjuke.com/loupan/' in request.url:
-                yield scrapy.Request(url=request.url, callback=self.parse, dont_filter=True,
-                                     errback=self.log_error, meta={'request_url': request.url})
-
+                retry_time = request.meta['retry_time']
+                if retry_time < 4:
+                    yield scrapy.Request(url=request.url, callback=self.parse, dont_filter=True,
+                                         errback=self.log_error,
+                                         meta={'request_url': request.url, 'retry_time': retry_time})
+                else:
+                    self.logger.error("%s had show verification code %s times" % (request.url, retry_time))
             else:
                 self.logger.error('TimeoutError on %s', request.url)
                 # 使用代理时将超时ip加入黑名单
