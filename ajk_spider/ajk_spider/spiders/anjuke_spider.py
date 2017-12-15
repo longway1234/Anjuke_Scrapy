@@ -102,7 +102,8 @@ class AnjukeSpiderSpider(scrapy.Spider):
                 city_id = re.findall(r'https://(.*?).fang.anjuke.com/loupan/(.*?).html', house_url)[0]
                 item['house_url'] = "https://{}.fang.anjuke.com/loupan/canshu-{}.html".format(city_id[0], city_id[1])
                 if item['house_url'] not in self.new_urls:
-                    item['house_title'] = resold_house.xpath("./div[@class='infos']//h3/span/text()").extract_first()
+                    item['house_title'] = resold_house.xpath("./div[@class='infos']//h3/span/text()").extract_first()\
+                        .replace('\n', '').replace(' ', '').replace('，', ' ').replace(',', ' ')
                     item['property_type'] = resold_house.xpath(
                         "./div[@class='infos']//i[@class='status-icon wuyetp']/text()").extract_first()
                     yield scrapy.Request(url=item['house_url'], callback=self.parse_new_info,
@@ -137,7 +138,8 @@ class AnjukeSpiderSpider(scrapy.Spider):
             else:
                 self.logger.error("%s had show verification code %s times" % (request_url, retry_time))
         else:
-            item['house_address'] = house_address.replace('\n', '').replace(' ', '').replace('，', ' ').replace(',', ' ')
+            item['house_address'] = house_address.replace('\n', '')\
+                .replace(' ', '').replace('，', ' ').replace(',', ' ')
             feature = selector.xpath(u"//div[text()='楼盘特点']/following-sibling::div[1]/a/text()").extract()
             if feature is not None:
                 item['feature'] = ''.join(feature).replace('\n', '') \
@@ -183,7 +185,8 @@ class AnjukeSpiderSpider(scrapy.Spider):
             planning_number = selector.xpath(
                 u"//div[text()='规划户数']/following-sibling::div[1]/text()").extract_first()
             if planning_number is not None:
-                item['planning_number'] = planning_number.split()[0]
+                item['planning_number'] = planning_number.split()[0].replace('\n', '') \
+                    .replace(' ', '').replace('，', ' ').replace(',', ' ')
             property_years = selector.xpath(
                 u"//div[text()='产权年限']/following-sibling::div[1]/text()[1]").extract_first()
             if property_years is not None:
