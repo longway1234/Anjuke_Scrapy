@@ -63,3 +63,11 @@ class ResoldHouseItem(scrapy.Item):
     house_url = scrapy.Field()  # 小区url
     map_lng = scrapy.Field()  # 地图经度
     map_lat = scrapy.Field()  # 地图纬度
+
+
+# 城市均价
+class CityAvgItem(scrapy.Item):
+    # define the fields for your item here like:
+    city_name = scrapy.Field()  # 城市
+    avg_price = scrapy.Field()  # 本月均价
+    last_price = scrapy.Field()  # 上月均价

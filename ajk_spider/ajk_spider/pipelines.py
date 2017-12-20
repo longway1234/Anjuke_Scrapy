@@ -86,3 +86,38 @@ class NewHousePipeline(object):
         if isinstance(item, NewHouseItem):
             self.exporter.export_item(item)
         return item
+
+
+# 城市均价信息保存为csv
+class CityAvgPricePipeline(object):
+    def __init__(self):
+        self.files = {}
+        self.file_path = './data/avg.csv'
+        # self.file_path = '/root/house_price/avg.csv'
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        pipeline = cls()
+        crawler.signals.connect(pipeline.spider_opened, signals.spider_opened)
+        crawler.signals.connect(pipeline.spider_closed, signals.spider_closed)
+        return pipeline
+
+    def spider_opened(self, spider):
+        file = open(self.file_path, 'a+b')
+        self.files[spider] = file
+        kwargs = {
+            'fields_to_export': ['city_name', 'avg_price', 'last_price']}
+
+        self.exporter = CsvItemExporter(file, include_headers_line=False, **kwargs)
+        self.exporter.start_exporting()
+
+    def spider_closed(self, spider):
+        self.exporter.finish_exporting()
+        file = self.files.pop(spider)
+        file.close()
+        print("spider closed!")
+
+    def process_item(self, item, spider):
+        if isinstance(item, CityAvgItem):
+            self.exporter.export_item(item)
+        return item

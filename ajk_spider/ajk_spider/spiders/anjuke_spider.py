@@ -7,7 +7,7 @@ from scrapy.spidermiddlewares.httperror import HttpError
 from scrapy.utils.project import get_project_settings
 from twisted.internet.error import DNSLookupError, TimeoutError, TCPTimedOutError
 
-from ajk_spider.items import NewHouseItem, ResoldHouseItem
+from ajk_spider.items import NewHouseItem, ResoldHouseItem, CityAvgItem
 
 
 class AnjukeSpiderSpider(scrapy.Spider):
@@ -15,7 +15,8 @@ class AnjukeSpiderSpider(scrapy.Spider):
     custom_settings = {
         'ITEM_PIPELINES': {
             'ajk_spider.pipelines.NewHousePipeline': 300,
-            'ajk_spider.pipelines.ResoldHousePipeline': 300
+            'ajk_spider.pipelines.ResoldHousePipeline': 300,
+            'ajk_spider.pipelines.CityAvgPricePipeline': 300,
         },
         'DOWNLOADER_MIDDLEWARES': {
             'ajk_spider.middlewares.ProcessHeaderMidware': 111,
@@ -58,9 +59,13 @@ class AnjukeSpiderSpider(scrapy.Spider):
             yield scrapy.Request(url=city_url, callback=self.parse_new_url, errback=self.log_error,
                                  meta={'request_url': city_url})
             # 请求二手房小区列表页
-            # resold_url = city_url + "/community/?from=navigation"
-            # yield scrapy.Request(url=resold_url, callback=self.parse_resold_houses, errback=self.log_error,
-            #                      meta={'request_url': resold_url, 'retry_time': 0})
+            resold_url = city_url + "/community/?from=navigation"
+            yield scrapy.Request(url=resold_url, callback=self.parse_resold_houses, errback=self.log_error,
+                                 meta={'request_url': resold_url, 'retry_time': 0})
+            # 请求城市二手房均价页面
+            avg_price_url = city_url + "/market/"
+            yield scrapy.Request(url=avg_price_url, callback=self.parse_avg_price, errback=self.log_error,
+                                 meta={'request_url': avg_price_url, 'retry_time': 0})
 
     def parse_new_url(self, response):
         # 该城市解析出新楼盘的url
@@ -485,6 +490,32 @@ class AnjukeSpiderSpider(scrapy.Spider):
                 item['property_company'] = property_company.replace('\n', '') \
                     .replace(' ', '').replace(',', ' ').replace('，', ' ')
             print(' save resold_house_data successful!')
+            yield item
+
+    def parse_avg_price(self, response):
+        request_url = response.meta["request_url"]
+        retry_time = response.meta["retry_time"]
+        print(request_url, response.url)
+        selector = Selector(response)
+        city_name = selector.xpath("//h1[@class='hTitle']/text()").extract_first()
+        if city_name is None:
+            if retry_time < 4:
+                # self.ip_blackset.add(response.meta['proxy'].replace(r'https://', ''))
+                retry_time += 1
+                self.num_black += 1
+                if self.num_black % 10 == 0:
+                    print('had show verification code %s times' % self.num_black)
+                yield scrapy.Request(url=request_url, callback=self.parse_new_info, dont_filter=True,
+                                     meta={'request_url': request_url, 'retry_time': retry_time})
+            else:
+                self.logger.error("%s had show verification code %s times" % (request_url, retry_time))
+        else:
+            item = CityAvgItem()
+            item['city_name'] = city_name[0:2]
+            item['avg_price'] = selector.xpath("//h2[@class='highLight']/em/text()").extract_first()
+            item['last_price'] = selector.xpath(
+                "//h2[@class='highLight']/following-sibling::h2[1]/em/text()").extract_first()
+            print("save avg_price_data successful!")
             yield item
 
     def log_error(self, failure):
